@@ -4,9 +4,36 @@ from fastapi.staticfiles import StaticFiles
 from openai import AsyncOpenAI, OpenAI
 from websockets.exceptions import ConnectionClosed
 
+import asyncio
+import logging
+
+"""
+    Ejemplo:
+    Código permite a los usuarios interactuar en tiempo real con un chatbot que 
+    interpreta sus mensajes, genera y ejecuta consultas SQL sobre una tabla de 
+    facturas, y devuelve los resultados de forma interactiva a través de un 
+    WebSocket.
+"""
+
+# Configuración básica de logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("app.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+
+
+
 import duckdb
 import uvicorn
 
+# Definición del endpoint donde se encuentra el servicio de la API
+# selecciono el de deepseek (pesa (GB))
 ENDPOINT = "http://127.0.0.1:39281/v1"
 #MODEL = "phi-3.5:3b-gguf-q4-km"
 #MODEL = "llama3.2:3b-gguf-q4-km"
@@ -65,6 +92,8 @@ async def plan_messages( messages, websocket ):
         messages=pmsg,
     )
 
+    logger.info(f"Respuesta recibida: {r}")
+
     r = response.choices[0].message.content
     print( r )
     r = clean_sql( r )
@@ -92,7 +121,7 @@ def clean_sql( sql ):
     if sql.find("```") != -1: sql = sql[sql.find("```"):]
     sql = sql.replace( "FROM facturas", "FROM './facturas.csv'" )
     sql = sql.replace( "fecha", "CAST(fecha AS VARCHAR)" )
-    
+    logger.error(f"La query sugerida para el cliente: {sql}")
     return sql
 
 
@@ -100,6 +129,7 @@ async def process_messages( messages, websocket ):
     completion_payload = {
         "messages": messages
     }
+    logger.info("Iniciando stream de respuesta desde client (client.chat.completions.create)")
 
     response = await client.chat.completions.create(
         top_p=0.9,
@@ -122,4 +152,3 @@ async def process_messages( messages, websocket ):
 
 
 uvicorn.run(app, host="0.0.0.0", port=8000)
-
